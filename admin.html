@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CAGS Admin | Chocolate Avenue Grooming</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <style>
+      .glass { backdrop-filter: blur(16px); background: rgba(255,255,255,0.75); }
+      .booking-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+      .booking-card:hover { transform: translateY(-4px); }
+      .pip { width:12px; height:12px; border-radius:50%; display:inline-block; border:2px solid transparent; }
+      .pip.paid   { background:#16a34a; border-color:#16a34a; }
+      .pip.unpaid { background:#e5e7eb; border-color:#d1d5db; }
+      .pip.due    { background:#6366f1; border-color:#4f46e5; }
+      .toast { animation: slideIn 0.3s ease, fadeOut 0.4s ease 2.1s forwards; }
+      @keyframes slideIn { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+      @keyframes fadeOut { to{opacity:0;pointer-events:none} }
+      .stripe-badge { background: linear-gradient(135deg,#635bff 0%,#7c3aed 100%); }
+    </style>
+  </head>
+  <body class="min-h-screen bg-gradient-to-br from-amber-50 via-white to-orange-100 text-gray-800 font-sans">
+
+    <div id="toast" class="hidden fixed bottom-6 right-6 z-[999] text-white px-6 py-3 rounded-2xl shadow-2xl font-bold text-sm toast"></div>
+
+    <!-- LOGIN -->
+    <section id="loginView" class="min-h-screen flex items-center justify-center p-6">
+      <div class="w-full max-w-md bg-white/80 glass border border-white rounded-[2rem] shadow-2xl p-10">
+        <div class="text-center mb-8">
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-amber-600 text-white rounded-2xl mb-4 shadow-lg shadow-amber-200">
+            <i class="fa-solid fa-paw text-2xl"></i>
+          </div>
+          <h1 class="text-3xl font-black text-gray-900">Admin Login</h1>
+          <p class="text-gray-500 mt-2">Chocolate Avenue Grooming Salon</p>
+        </div>
+        <form id="loginForm" class="space-y-5">
+          <input id="email" type="text" placeholder="Admin Email" class="w-full px-5 py-4 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-amber-500 outline-none transition" required />
+          <input id="password" type="password" placeholder="Password" class="w-full px-5 py-4 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-amber-500 outline-none transition" required />
+          <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white py-4 rounded-2xl font-bold shadow-lg transition-all active:scale-[0.98]">Sign In</button>
+        </form>
+        <p id="loginMsg" class="mt-4 text-center text-red-500 text-sm font-medium"></p>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section id="dashboardView" class="hidden">
+      <header class="sticky top-0 z-50 bg-white/70 backdrop-blur-md border-b border-white/60">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 class="text-2xl font-black text-gray-900 tracking-tight">CAGS Dashboard</h1>
+            <p id="adminEmailLabel" class="text-sm text-amber-700 font-medium"></p>
+          </div>
+          <div class="flex items-center gap-3 flex-wrap">
+            <a href="https://dashboard.stripe.com/payments" target="_blank"
+               class="px-5 py-2.5 rounded-xl stripe-badge text-white font-bold flex items-center gap-2 text-sm hover:opacity-90 transition">
+              <i class="fa-brands fa-stripe"></i> Stripe Dashboard
+            </a>
+            <button id="addAppointmentBtn" class="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition flex items-center gap-2">
+              <i class="fa-solid fa-plus"></i> Add Appointment
+            </button>
+            <button id="logoutBtn" class="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-red-50 hover:text-red-600 font-bold transition">Sign Out</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="max-w-7xl mx-auto px-6 py-8">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+          <div class="bg-white p-6 rounded-3xl shadow-sm"><p class="text-gray-500 text-xs font-bold uppercase tracking-wider">Total</p><p id="statsTotal" class="text-3xl font-black mt-1">0</p></div>
+          <div class="bg-white p-6 rounded-3xl shadow-sm"><p class="text-amber-500 text-xs font-bold uppercase tracking-wider">Pending</p><p id="statsPending" class="text-3xl font-black mt-1">0</p></div>
+          <div class="bg-white p-6 rounded-3xl shadow-sm"><p class="text-green-500 text-xs font-bold uppercase tracking-wider">Approved</p><p id="statsApproved" class="text-3xl font-black mt-1 text-green-600">0</p></div>
+          <div class="bg-white p-6 rounded-3xl shadow-sm"><p class="text-red-500 text-xs font-bold uppercase tracking-wider">Rejected</p><p id="statsRejected" class="text-3xl font-black mt-1 text-red-600">0</p></div>
+          <div class="bg-white p-6 rounded-3xl shadow-sm"><p class="text-indigo-500 text-xs font-bold uppercase tracking-wider">$ Plans</p><p id="statsPlans" class="text-3xl font-black mt-1 text-indigo-600">0</p></div>
+        </div>
+
+        <div class="flex flex-col md:flex-row gap-4 mb-8">
+          <div class="relative flex-1">
+            <i class="fa-solid fa-search absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"></i>
+            <input id="searchInput" type="text" placeholder="Search name, email, phone…" class="w-full pl-12 pr-5 py-4 rounded-2xl bg-white shadow-sm focus:ring-2 focus:ring-amber-500 outline-none border-none" />
+          </div>
+          <select id="statusFilter" class="px-6 py-4 rounded-2xl bg-white shadow-sm font-bold text-gray-600 outline-none border-none">
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+
+        <div id="bookingList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+      </main>
+    </section>
+
+    <!-- ADD APPOINTMENT MODAL -->
+    <div id="addModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="p-8">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-black">Add New Appointment</h2>
+            <button id="closeAddModal" class="text-gray-400 hover:text-gray-700 text-2xl"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <form id="addAppointmentForm" class="space-y-4">
+            <div><label class="block font-semibold mb-2 text-sm">Customer Name</label><input type="text" name="name" required class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-amber-500 outline-none" /></div>
+            <div><label class="block font-semibold mb-2 text-sm">Email</label><input type="email" name="email" required class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-amber-500 outline-none" /></div>
+            <div><label class="block font-semibold mb-2 text-sm">Phone</label><input type="tel" name="phone" required class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-amber-500 outline-none" /></div>
+            <div class="grid grid-cols-2 gap-4">
+              <div><label class="block font-semibold mb-2 text-sm">Date</label><input type="date" name="date" required class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-amber-500 outline-none" /></div>
+              <div><label class="block font-semibold mb-2 text-sm">Time</label>
+                <select name="time" required class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-amber-500 outline-none bg-white">
+                  <option value="">Select time</option>
+                  <option value="09:00">9:00 AM</option><option value="10:00">10:00 AM</option>
+                  <option value="11:00">11:00 AM</option><option value="12:00">12:00 PM</option>
+                  <option value="13:00">1:00 PM</option><option value="14:00">2:00 PM</option>
+                  <option value="15:00">3:00 PM</option><option value="16:00">4:00 PM</option>
+                  <option value="17:00">5:00 PM</option><option value="18:00">6:00 PM</option>
+                </select>
+              </div>
+            </div>
+            <div><label class="block font-semibold mb-2 text-sm">Status</label>
+              <select name="status" class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-amber-500 outline-none bg-white">
+                <option value="pending">Pending</option>
+                <option value="approved">Approved (auto-blocks slot)</option>
+              </select>
+            </div>
+            <div><label class="block font-semibold mb-2 text-sm">Notes / Dog Info</label><textarea name="message" rows="3" placeholder="Breed, grooming notes, etc." class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-amber-500 outline-none resize-none"></textarea></div>
+            <div class="flex gap-3 pt-2">
+              <button type="submit" id="addSubmitBtn" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-2xl font-bold transition">Add Appointment</button>
+              <button type="button" id="cancelAddModal" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-2xl font-bold transition">Cancel</button>
+            </div>
+            <p id="addMsg" class="text-center text-sm font-medium hidden"></p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAYMENT PLAN MODAL -->
+    <div id="planModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div class="p-8">
+          <div class="flex justify-between items-start mb-1">
+            <div>
+              <h2 class="text-2xl font-black text-gray-900">Payment Plan</h2>
+              <p id="planCustomerName" class="text-indigo-600 font-bold text-sm mt-0.5"></p>
+            </div>
+            <button id="closePlanModal" class="text-gray-400 hover:text-gray-700 text-2xl mt-1"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <!-- EXISTING PLAN -->
+          <div id="planExistingView" class="hidden mt-5">
+            <div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-5 mb-5">
+              <div class="flex justify-between items-center mb-3">
+                <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest"><i class="fa-brands fa-stripe mr-1"></i>Stripe Plan</p>
+                <button id="deletePlanBtn" class="text-xs text-red-400 hover:text-red-600 font-bold">Remove Plan</button>
+              </div>
+              <p id="planSummaryText" class="text-2xl font-black text-gray-900 mb-1"></p>
+              <p id="planProgressText" class="text-sm text-gray-500 mb-3"></p>
+              <div id="planPips" class="flex gap-2 flex-wrap mb-3"></div>
+              <div class="w-full bg-indigo-100 rounded-full h-2.5 mb-2">
+                <div id="planProgressBar" class="bg-indigo-500 h-2.5 rounded-full transition-all duration-700"></div>
+              </div>
+              <p id="planRemainingText" class="text-xs text-indigo-400 font-medium"></p>
+            </div>
+            <div id="installmentRows" class="space-y-3 mb-5"></div>
+            <div class="bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm text-gray-500 leading-relaxed">
+              <i class="fa-brands fa-stripe text-indigo-500 mr-1 text-base"></i>
+              Customers pay on a <strong>secure Stripe page</strong> — cards, Apple Pay &amp; Google Pay accepted. Stripe emails them a receipt automatically.
+              After they pay, verify in your <a href="https://dashboard.stripe.com/payments" target="_blank" class="text-indigo-600 font-bold underline">Stripe Dashboard</a>, then click <strong>Mark Received</strong>.
+            </div>
+          </div>
+
+          <!-- NEW PLAN FORM -->
+          <div id="planNewView" class="mt-5">
+            <div class="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 mb-5 text-sm text-indigo-700">
+              <p class="font-black mb-2">How it works</p>
+              <ol class="space-y-1 text-indigo-600 list-decimal list-inside">
+                <li>Enter total &amp; pick installments → we calculate the per-payment amount</li>
+                <li>Create a Stripe Payment Link for that amount (takes 1 minute)</li>
+                <li>Paste it here → we store it in Firebase</li>
+                <li>Click <strong>Send to Customer</strong> each time a payment is due</li>
+                <li>Confirm payment in Stripe, then click <strong>Mark Received</strong></li>
+              </ol>
+            </div>
+            <form id="planForm" class="space-y-4">
+              <div>
+                <label class="block font-semibold mb-2 text-sm">Total Grooming Amount ($)</label>
+                <input type="number" id="planTotal" min="1" step="0.01" placeholder="e.g. 120.00" required
+                  class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-indigo-400 outline-none" />
+              </div>
+             <div class="grid grid-cols-5 gap-2" id="installmentPicker">
+  <button type="button" data-val="1" class="inst-btn py-3 rounded-2xl border border-gray-200 font-bold text-sm hover:border-indigo-400 hover:bg-indigo-50 transition">1</button>
+  <button type="button" data-val="2" class="inst-btn py-3 rounded-2xl border border-gray-200 font-bold text-sm hover:border-indigo-400 hover:bg-indigo-50 transition">2</button>
+  <button type="button" data-val="3" class="inst-btn py-3 rounded-2xl border border-gray-200 font-bold text-sm hover:border-indigo-400 hover:bg-indigo-50 transition">3</button>
+  <button type="button" data-val="4" class="inst-btn py-3 rounded-2xl border border-gray-200 font-bold text-sm hover:border-indigo-400 hover:bg-indigo-50 transition">4</button>
+  <button type="button" data-val="6" class="inst-btn py-3 rounded-2xl border border-gray-200 font-bold text-sm hover:border-indigo-400 hover:bg-indigo-50 transition">6</button>
+</div>
+
+              <!-- Preview -->
+              <div id="planPreview" class="hidden bg-green-50 border border-green-100 rounded-2xl p-4 text-center">
+                <p class="text-xs text-gray-500 mb-1">Each installment</p>
+                <p id="planPreviewAmount" class="text-3xl font-black text-green-700"></p>
+                <p id="planPreviewFee" class="text-xs text-gray-400 mt-1"></p>
+              </div>
+
+              <!-- Stripe link field -->
+              <div id="stripeLinkSection" class="hidden">
+                <label class="block font-semibold mb-1 text-sm">
+                  Stripe Payment Link
+                  <span class="text-gray-400 font-normal ml-1">for <span id="stripeLinkLabel"></span></span>
+                </label>
+                <p class="text-xs text-gray-400 mb-2 leading-relaxed">
+                  Go to <a href="https://dashboard.stripe.com/payment-links" target="_blank" class="text-indigo-500 underline font-semibold">Stripe → Payment Links → Create link</a>
+                  for <strong id="stripeLinkLabel2"></strong>. Copy the URL and paste it here.
+                </p>
+                <input type="url" id="planStripeLink" placeholder="https://buy.stripe.com/…"
+                  class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-indigo-400 outline-none font-mono text-sm" />
+                <p id="stripeLinkError" class="hidden text-xs text-red-500 mt-1">Please enter a valid Stripe link (https://buy.stripe.com/…)</p>
+              </div>
+
+              <div>
+                <label class="block font-semibold mb-2 text-sm">Note <span class="text-gray-400 font-normal">(your reference)</span></label>
+                <input type="text" id="planNote" placeholder="e.g. Full groom – Jane's goldendoodle"
+                  class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-indigo-400 outline-none" />
+              </div>
+
+              <button type="submit" id="planSubmitBtn"
+                class="w-full stripe-badge text-white py-3.5 rounded-2xl font-bold hover:opacity-90 transition flex items-center justify-center gap-2">
+                <i class="fa-brands fa-stripe"></i> Create Payment Plan
+              </button>
+              <p id="planMsg" class="hidden text-center text-sm font-medium"></p>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+      import {
+        getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
+      } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+      import {
+        getFirestore, collection, onSnapshot, updateDoc, deleteDoc,
+        doc, setDoc, addDoc,
+      } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyDGboX-vIjRHG8c1WH96-ggXFTp6MwVFCk",
+        authDomain: "chocolate-avenue-grooming.firebaseapp.com",
+        projectId: "chocolate-avenue-grooming",
+        storageBucket: "chocolate-avenue-grooming.firebasestorage.app",
+        messagingSenderId: "598219200758",
+        appId: "1:598219200758:web:715700a519b5ace9aff4d7",
+      };
+
+      const app  = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db   = getFirestore(app);
+      emailjs.init("KmW8d6wt0pthfowkY");
+
+      const state = { bookings: [], filter: "all", search: "", activePlanId: null };
+
+      // ── HELPERS ──────────────────────────────────────────────────
+      const fmtTime = t => { if (!t) return "N/A"; const [h,m]=t.split(":").map(Number); return `${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`; };
+      const fmtDate = d => d ? new Date(d.replace(/-/g,"/")).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}) : "N/A";
+      const prettyDate = d => d ? new Date(d.replace(/-/g,"/")).toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"}) : "N/A";
+      const fmt$ = n => `$${Number(n).toFixed(2)}`;
+      const stripeFee = amt => ((amt*0.029)+0.30).toFixed(2);
+      const getBadge = s => s==="approved"?"bg-green-100 text-green-700 border-green-200":s==="rejected"?"bg-red-100 text-red-700 border-red-200":"bg-amber-100 text-amber-700 border-amber-200";
+
+      function showToast(msg, bg="#1f2937") {
+        const t = document.getElementById("toast");
+        t.textContent=msg; t.style.background=bg;
+        t.classList.remove("hidden"); t.classList.add("toast");
+        setTimeout(()=>{ t.classList.add("hidden"); t.classList.remove("toast"); }, 2700);
+      }
+      window.showToastGlobal = showToast;
+
+      function isValidStripeLink(url) {
+        try { const u=new URL(url); return u.hostname==="buy.stripe.com"||u.hostname.endsWith(".stripe.com"); } catch { return false; }
+      }
+
+      // ── AVAILABILITY ─────────────────────────────────────────────
+      const slotId = (d,t) => `${d}_${t}`;
+      async function blockSlot(b) {
+        await setDoc(doc(db,"availability",slotId(b.date,b.time)),{
+          date:b.date,time:b.time,bookedBy:b.name||"Unknown",bookedEmail:b.email||"",
+          appointmentId:b.id||"",blocked:true,blockedAt:new Date().toISOString()
+        });
+      }
+      async function unblockSlot(b) { try { await deleteDoc(doc(db,"availability",slotId(b.date,b.time))); } catch {} }
+
+      // ── EMAIL ─────────────────────────────────────────────────────
+      async function sendApprovalEmail(booking) {
+        try {
+          await emailjs.send("service_xfesk05","template_ht3z1vd",{
+            to_name:booking.name,to_email:booking.email,phone:booking.phone||"N/A",
+            dog_info:booking.message||"N/A",appt_date:prettyDate(booking.date),appt_time:fmtTime(booking.time)
+          });
+        } catch(err) { console.warn("Email failed:",err.message); }
+      }
+
+      // ── CARD ACTIONS ──────────────────────────────────────────────
+      document.getElementById("bookingList").addEventListener("click", async e => {
+        const btn = e.target.closest("button[data-id]");
+        if (!btn) return;
+        const {id, action} = btn.dataset;
+        const booking = state.bookings.find(b => b.id === id);
+        if (action === "plan") { openPlanModal(booking); return; }
+        try {
+          btn.disabled=true; btn.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i>';
+          const ref = doc(db,"appointments",id);
+          if (action==="delete") {
+            if (confirm("Permanently delete this record?")) {
+              if (booking?.status==="approved") await unblockSlot(booking);
+              await deleteDoc(ref);
+            } else { updateUI(); }
+          } else if (action==="approve") {
+            await updateDoc(ref,{status:"approved"});
+            if (booking) { await blockSlot(booking); await sendApprovalEmail(booking); }
+            showToast("✅ Approved & email sent","#16a34a");
+          } else if (action==="reject") {
+            if (booking?.status==="approved") await unblockSlot(booking);
+            await updateDoc(ref,{status:"rejected"});
+          } else if (action==="pending") {
+            if (booking?.status==="approved") await unblockSlot(booking);
+            await updateDoc(ref,{status:"pending"});
+          }
+        } catch(err) { alert("Error: "+err.message); updateUI(); }
+      });
+
+      // ── PLAN MODAL ────────────────────────────────────────────────
+      let planBooking = null;
+      let selInst = null;
+
+      function openPlanModal(booking) {
+        planBooking = booking;
+        state.activePlanId = booking.id;
+        document.getElementById("planCustomerName").textContent =
+          `${booking.name} · ${fmtDate(booking.date)} at ${fmtTime(booking.time)}`;
+        const has = !!booking.paymentPlan;
+        document.getElementById("planNewView").classList.toggle("hidden", has);
+        document.getElementById("planExistingView").classList.toggle("hidden", !has);
+        if (has) renderExistingPlan(booking); else resetPlanForm();
+        document.getElementById("planModal").classList.remove("hidden");
+      }
+
+      function resetPlanForm() {
+        selInst = null;
+        ["planTotal","planNote","planStripeLink"].forEach(id => document.getElementById(id).value="");
+        document.getElementById("planInstallments").value="";
+        document.getElementById("planPreview").classList.add("hidden");
+        document.getElementById("stripeLinkSection").classList.add("hidden");
+        document.getElementById("planMsg").classList.add("hidden");
+        document.getElementById("stripeLinkError").classList.add("hidden");
+        document.querySelectorAll(".inst-btn").forEach(b =>
+          b.classList.remove("bg-indigo-500","text-white","border-indigo-500"));
+      }
+
+      function renderExistingPlan(booking) {
+        const plan = booking.paymentPlan;
+        const paid = plan.paidCount||0, total=plan.installments, per=plan.amountPerInstallment;
+        const rem = total-paid, pct = Math.round((paid/total)*100);
+        document.getElementById("planSummaryText").textContent = `${fmt$(per)} × ${total} = ${fmt$(plan.total)}`;
+        document.getElementById("planProgressText").textContent = `${paid} of ${total} installments received`;
+        document.getElementById("planProgressBar").style.width = pct+"%";
+        document.getElementById("planRemainingText").textContent =
+          rem>0 ? `${fmt$(rem*per)} outstanding across ${rem} payment${rem>1?"s":""}` : "🎉 Fully paid!";
+
+        const pipsEl = document.getElementById("planPips");
+        pipsEl.innerHTML = "";
+        for (let i=0;i<total;i++) {
+          const p=document.createElement("span");
+          p.className=`pip ${i<paid?"paid":i===paid?"due":"unpaid"}`;
+          pipsEl.appendChild(p);
+        }
+
+        const rowsEl = document.getElementById("installmentRows");
+        rowsEl.innerHTML="";
+        for (let i=0;i<total;i++) {
+          const isPaid=i<paid, isDue=i===paid;
+          const div=document.createElement("div");
+          div.className=`flex items-center justify-between gap-3 p-4 rounded-2xl border ${isPaid?"bg-green-50 border-green-100":isDue?"bg-indigo-50 border-indigo-200":"bg-gray-50 border-gray-100"}`;
+
+          const safeLink = plan.stripeLink ? plan.stripeLink.replace(/'/g,"") : "";
+
+          div.innerHTML=`
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shrink-0 ${isPaid?"bg-green-600 text-white":isDue?"stripe-badge text-white":"bg-gray-200 text-gray-500"}">
+                ${isPaid?"✓":i+1}
+              </div>
+              <div>
+                <p class="font-black text-sm">${fmt$(per)}</p>
+                <p class="text-xs ${isPaid?"text-green-500":isDue?"text-indigo-500":"text-gray-400"}">${isPaid?"Received":isDue?"Next due":"Upcoming"}</p>
+              </div>
+            </div>
+            <div class="flex gap-2 flex-wrap justify-end">
+              ${!isPaid && safeLink ? `
+                <a href="${safeLink}" target="_blank"
+                   class="px-3 py-2 rounded-xl stripe-badge text-white text-xs font-bold hover:opacity-90 transition flex items-center gap-1">
+                  <i class="fa-brands fa-stripe"></i> Send to Customer
+                </a>
+                <button class="copy-link-btn px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold transition"
+                  data-link="${safeLink}">Copy</button>
+              ` : ""}
+              ${isDue ? `
+                <button class="mark-paid-btn px-3 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-bold transition"
+                  data-bid="${booking.id}">Mark Received ✓</button>
+              ` : ""}
+              ${isPaid ? `<span class="text-xs font-bold text-green-600 bg-green-100 px-3 py-2 rounded-xl">Received</span>` : ""}
+            </div>
+          `;
+          rowsEl.appendChild(div);
+        }
+
+        rowsEl.querySelectorAll(".copy-link-btn").forEach(b =>
+          b.addEventListener("click", () =>
+            navigator.clipboard.writeText(b.dataset.link).then(()=>showToast("📋 Stripe link copied!","#6366f1"))));
+
+        rowsEl.querySelectorAll(".mark-paid-btn").forEach(b =>
+          b.addEventListener("click", async () => {
+            const bk = state.bookings.find(x=>x.id===b.dataset.bid);
+            if (!bk?.paymentPlan) return;
+            const n = (bk.paymentPlan.paidCount||0)+1;
+            b.textContent="Saving…"; b.disabled=true;
+            try {
+              await updateDoc(doc(db,"appointments",b.dataset.bid),{
+                "paymentPlan.paidCount": n,
+                "paymentPlan.lastPaidAt": new Date().toISOString(),
+              });
+              showToast(`✅ Installment ${n} of ${bk.paymentPlan.installments} received!`,"#16a34a");
+            } catch(err) { showToast("Error: "+err.message,"#dc2626"); }
+          }));
+      }
+
+      // Installment picker
+      document.getElementById("installmentPicker").addEventListener("click", e => {
+        const b=e.target.closest(".inst-btn"); if (!b) return;
+        selInst=parseInt(b.dataset.val);
+        document.getElementById("planInstallments").value=selInst;
+        document.querySelectorAll(".inst-btn").forEach(x => {
+          x.classList.toggle("bg-indigo-500",x===b);
+          x.classList.toggle("text-white",x===b);
+          x.classList.toggle("border-indigo-500",x===b);
+        });
+        recalc();
+      });
+      document.getElementById("planTotal").addEventListener("input", recalc);
+
+      function recalc() {
+        const total=parseFloat(document.getElementById("planTotal").value);
+        const inst=selInst;
+        const prev=document.getElementById("planPreview");
+        const linkSec=document.getElementById("stripeLinkSection");
+        if (total>0 && inst) {
+          const per=(total/inst).toFixed(2);
+          document.getElementById("planPreviewAmount").textContent=`$${per} / installment`;
+          document.getElementById("planPreviewFee").textContent=`Stripe fee: ~$${stripeFee(parseFloat(per))} per payment (2.9% + $0.30)`;
+          prev.classList.remove("hidden");
+          document.getElementById("stripeLinkLabel").textContent=`$${per}`;
+          document.getElementById("stripeLinkLabel2").textContent=`$${per}`;
+          linkSec.classList.remove("hidden");
+        } else { prev.classList.add("hidden"); linkSec.classList.add("hidden"); }
+      }
+
+      // Create plan
+      document.getElementById("planForm").addEventListener("submit", async e => {
+        e.preventDefault();
+        if (!planBooking) return;
+        const total=parseFloat(document.getElementById("planTotal").value);
+        const inst=parseInt(document.getElementById("planInstallments").value);
+        const link=document.getElementById("planStripeLink").value.trim();
+        const note=document.getElementById("planNote").value.trim();
+        const msg=document.getElementById("planMsg");
+        const linkErr=document.getElementById("stripeLinkError");
+
+        if (!inst) {
+          msg.textContent="Please pick a number of installments.";
+          msg.className="text-center text-sm font-medium text-red-600";
+          msg.classList.remove("hidden"); return;
+        }
+        if (link && !isValidStripeLink(link)) { linkErr.classList.remove("hidden"); return; }
+        linkErr.classList.add("hidden");
+
+        const btn=document.getElementById("planSubmitBtn");
+        btn.innerHTML='<i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Saving…'; btn.disabled=true;
+        try {
+          await updateDoc(doc(db,"appointments",planBooking.id),{
+            paymentPlan:{
+              total, installments:inst,
+              amountPerInstallment:parseFloat((total/inst).toFixed(2)),
+              paidCount:0,
+              stripeLink:link||null,
+              note:note||null,
+              createdAt:new Date().toISOString()
+            }
+          });
+          showToast("💳 Stripe payment plan created!","#6366f1");
+          document.getElementById("planModal").classList.add("hidden");
+        } catch(err) {
+          msg.textContent="Error: "+err.message;
+          msg.className="text-center text-sm font-medium text-red-600";
+          msg.classList.remove("hidden");
+        } finally { btn.innerHTML='<i class="fa-brands fa-stripe mr-2"></i>Create Payment Plan'; btn.disabled=false; }
+      });
+
+      document.getElementById("deletePlanBtn").addEventListener("click", async () => {
+        if (!planBooking || !confirm("Remove this payment plan?")) return;
+        try {
+          await updateDoc(doc(db,"appointments",planBooking.id),{paymentPlan:null});
+          showToast("Payment plan removed.","#6b7280");
+          document.getElementById("planModal").classList.add("hidden");
+        } catch(err) { showToast("Error: "+err.message,"#dc2626"); }
+      });
+
+      document.getElementById("closePlanModal").onclick = () => document.getElementById("planModal").classList.add("hidden");
+      document.getElementById("planModal").addEventListener("click", e => { if (e.target===document.getElementById("planModal")) document.getElementById("planModal").classList.add("hidden"); });
+
+      function maybeRefreshPlan(bookings) {
+        if (document.getElementById("planModal").classList.contains("hidden")||!state.activePlanId) return;
+        const upd=bookings.find(b=>b.id===state.activePlanId);
+        if (upd) { planBooking=upd; if (upd.paymentPlan) renderExistingPlan(upd); }
+      }
+
+      // ── ADD APPOINTMENT ───────────────────────────────────────────
+      const addModal=document.getElementById("addModal");
+      document.getElementById("addAppointmentBtn").onclick=()=>addModal.classList.remove("hidden");
+      document.getElementById("closeAddModal").onclick=()=>addModal.classList.add("hidden");
+      document.getElementById("cancelAddModal").onclick=()=>addModal.classList.add("hidden");
+      addModal.addEventListener("click",e=>{ if(e.target===addModal) addModal.classList.add("hidden"); });
+
+      document.getElementById("addAppointmentForm").addEventListener("submit", async e => {
+        e.preventDefault();
+        const form=e.target, btn=document.getElementById("addSubmitBtn"), msg=document.getElementById("addMsg");
+        const data=Object.fromEntries(new FormData(form));
+        btn.textContent="Saving…"; btn.disabled=true;
+        try {
+          const ref=await addDoc(collection(db,"appointments"),{
+            name:data.name,email:data.email,phone:data.phone,
+            message:data.message||"",date:data.date,time:data.time,status:data.status
+          });
+          if (data.status==="approved") { await blockSlot({id:ref.id,...data}); await sendApprovalEmail({id:ref.id,...data}); }
+          msg.textContent="✅ Appointment added!"; msg.className="text-center text-sm font-medium text-green-600"; msg.classList.remove("hidden");
+          form.reset();
+          setTimeout(()=>{ msg.classList.add("hidden"); addModal.classList.add("hidden"); },1500);
+        } catch(err) {
+          msg.textContent="❌ "+err.message; msg.className="text-center text-sm font-medium text-red-600"; msg.classList.remove("hidden");
+        } finally { btn.textContent="Add Appointment"; btn.disabled=false; }
+      });
+
+      // ── LOGIN ─────────────────────────────────────────────────────
+      document.getElementById("loginForm").addEventListener("submit", async e => {
+        e.preventDefault();
+        try {
+          await signInWithEmailAndPassword(auth,document.getElementById("email").value.trim(),document.getElementById("password").value);
+        } catch { document.getElementById("loginMsg").textContent="Login Failed: Check credentials."; }
+      });
+      document.getElementById("logoutBtn").onclick=()=>signOut(auth);
+
+      // ── RENDER ────────────────────────────────────────────────────
+      function planLine(plan) {
+        const rem=plan.installments-(plan.paidCount||0);
+        return rem===0 ? "🎉 Fully paid!" : `${fmt$(plan.amountPerInstallment)}/installment · ${fmt$(rem*plan.amountPerInstallment)} remaining`;
+      }
+
+      function updateUI() {
+        const rows=state.bookings.filter(b=>{
+          const ms=state.filter==="all"||b.status===state.filter;
+          const q=state.search.toLowerCase();
+          return ms&&(!q||JSON.stringify(b).toLowerCase().includes(q));
+        });
+
+        document.getElementById("statsTotal").textContent=state.bookings.length;
+        document.getElementById("statsPending").textContent=state.bookings.filter(x=>!x.status||x.status==="pending").length;
+        document.getElementById("statsApproved").textContent=state.bookings.filter(x=>x.status==="approved").length;
+        document.getElementById("statsRejected").textContent=state.bookings.filter(x=>x.status==="rejected").length;
+        document.getElementById("statsPlans").textContent=state.bookings.filter(x=>x.paymentPlan).length;
+
+        document.getElementById("bookingList").innerHTML = rows.map(b => {
+          const plan=b.paymentPlan;
+          const planBlock=plan?`
+            <div class="mt-3 bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-3">
+              <div class="flex justify-between items-center mb-2">
+                <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest"><i class="fa-brands fa-stripe mr-1"></i>Stripe Plan</p>
+                <p class="text-xs font-bold text-indigo-600">${plan.paidCount||0}/${plan.installments} paid</p>
+              </div>
+              <div class="flex gap-1.5 mb-2">${Array.from({length:plan.installments},(_,i)=>`<span class="pip ${i<(plan.paidCount||0)?"paid":i===(plan.paidCount||0)?"due":"unpaid"}"></span>`).join("")}</div>
+              <div class="w-full bg-indigo-100 rounded-full h-1.5 mb-1.5">
+                <div class="bg-indigo-500 h-1.5 rounded-full" style="width:${Math.round(((plan.paidCount||0)/plan.installments)*100)}%"></div>
+              </div>
+              <p class="text-xs text-gray-400">${planLine(plan)}</p>
+            </div>` : "";
+          return `
+            <article class="booking-card bg-white border border-gray-100 rounded-[2rem] shadow-sm p-6 flex flex-col">
+              <div class="flex justify-between items-start mb-4">
+                <div>
+                  <h3 class="text-xl font-black">${b.name||"Anonymous"}</h3>
+                  <p class="text-sm text-gray-500">${b.email||""}</p>
+                  ${b.phone?`<p class="text-sm text-gray-400">${b.phone}</p>`:""}
+                </div>
+                <span class="px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest ${getBadge(b.status||"pending")}">${b.status||"pending"}</span>
+              </div>
+              <div class="grid grid-cols-2 gap-3 mb-3">
+                <div class="bg-gray-50 p-3 rounded-2xl"><p class="text-[10px] font-bold text-gray-400 uppercase">Date</p><p class="font-bold text-sm">${fmtDate(b.date)}</p></div>
+                <div class="bg-gray-50 p-3 rounded-2xl"><p class="text-[10px] font-bold text-gray-400 uppercase">Time</p><p class="font-bold text-sm">${fmtTime(b.time)}</p></div>
+              </div>
+              <p class="text-sm text-gray-600 italic bg-amber-50/50 p-3 rounded-xl border border-amber-100/50 mb-2 flex-grow">"${b.message||"No message."}"</p>
+              ${planBlock}
+              <div class="flex gap-2 mt-4">
+                ${b.status!=="approved"?`<button data-action="approve" data-id="${b.id}" class="flex-1 bg-green-600 text-white py-3 rounded-xl text-xs font-bold hover:bg-green-700 transition">Approve</button>`:""}
+                ${b.status!=="rejected"?`<button data-action="reject"  data-id="${b.id}" class="flex-1 bg-red-600 text-white py-3 rounded-xl text-xs font-bold hover:bg-red-700 transition">Reject</button>`:""}
+                ${b.status==="approved"||b.status==="rejected"?`<button data-action="pending" data-id="${b.id}" class="flex-1 bg-amber-500 text-white py-3 rounded-xl text-xs font-bold hover:bg-amber-600 transition">Reset</button>`:""}
+                <button data-action="plan" data-id="${b.id}"
+                  class="flex-1 ${plan?"stripe-badge text-white":"bg-indigo-100 hover:bg-indigo-200 text-indigo-700"} py-3 rounded-xl text-xs font-bold transition"
+                  title="${plan?"Manage Stripe plan":"Add Stripe payment plan"}">
+                  <i class="fa-brands fa-stripe"></i> ${plan?"Plan":"Add"}
+                </button>
+                <button data-action="delete" data-id="${b.id}" class="w-12 bg-gray-900 text-white py-3 rounded-xl hover:bg-black transition"><i class="fa-solid fa-trash-can"></i></button>
+              </div>
+            </article>`;
+        }).join("")||'<div class="col-span-full text-center py-20 text-gray-400 font-medium">No records found.</div>';
+      }
+
+      document.getElementById("searchInput").oninput=e=>{ state.search=e.target.value; updateUI(); };
+      document.getElementById("statusFilter").onchange=e=>{ state.filter=e.target.value; updateUI(); };
+
+      // ── AUTH ──────────────────────────────────────────────────────
+      onAuthStateChanged(auth, user => {
+        if (user) {
+          document.getElementById("loginView").classList.add("hidden");
+          document.getElementById("dashboardView").classList.remove("hidden");
+          document.getElementById("adminEmailLabel").textContent=user.email;
+          onSnapshot(collection(db,"appointments"), snap => {
+            state.bookings=snap.docs.map(d=>({id:d.id,...d.data()}));
+            updateUI(); maybeRefreshPlan(state.bookings);
+          }, err=>console.error("Sync:",err));
+        } else {
+          document.getElementById("loginView").classList.remove("hidden");
+          document.getElementById("dashboardView").classList.add("hidden");
+        }
+      });
+    </script>
+  </body>
+</html>
